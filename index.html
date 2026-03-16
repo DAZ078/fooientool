@@ -31,8 +31,10 @@
   .btn-reset{font-size:13px;color:#666}
   .save-badge{font-size:11px;color:#3b6d11;margin-left:8px;opacity:0;transition:opacity 0.4s}
   .result-table{width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed}
-  .result-table th{text-align:left;color:#666;font-weight:400;padding:6px 8px;border-bottom:0.5px solid #ddd}
-  .result-table td{padding:6px 8px;border-bottom:0.5px solid #ddd;vertical-align:top;word-break:break-word}
+  .result-table th{text-align:left;color:#666;font-weight:400;padding:10px 8px;border-bottom:0.5px solid #ddd}
+  .result-table td{padding:12px 8px;border-bottom:0.5px solid #ddd;vertical-align:top;word-break:break-word}
+  .munt-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-top:2px}
+  .munt-pill{background:#f0f0ee;border-radius:6px;padding:3px 7px;font-size:12px;text-align:center;white-space:nowrap}
   .rest-box{background:#faeeda;border:0.5px solid #ba7517;border-radius:8px;padding:10px 12px;font-size:13px;color:#854f0b;margin-top:8px}
   .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
   @media print{
@@ -235,12 +237,11 @@ function bereken(){
   const tbody=document.getElementById('resultBody');
   tbody.innerHTML='';
   verdeling.forEach(m=>{
-    const bilStr=BILJETTEN.filter(c=>m.items[c.w]>0).map(c=>`${m.items[c.w]}× ${c.label}`).join(', ');
-    const muntStr=MUNTEN.filter(c=>m.items[c.w]>0).map(c=>`${m.items[c.w]}× ${c.label}`).join(', ');
-    const alles=[bilStr,muntStr].filter(Boolean).join(' + ')||'—';
+    const allMunten=[...BILJETTEN,...MUNTEN].filter(c=>m.items[c.w]>0).map(c=>`<span class="munt-pill">${m.items[c.w]}× ${c.label}</span>`);
+    const muntHtml=allMunten.length?`<div class="munt-grid">${allMunten.join('')}</div>`:'—';
     const pct=((m.uren/totU)*100).toFixed(1);
     const tr=document.createElement('tr');
-    tr.innerHTML=`<td>${m.naam}</td><td>${m.uren}u</td><td>${pct}%</td><td>${alles}</td><td>${eur(m.totaal)}</td>`;
+    tr.innerHTML=`<td>${m.naam}</td><td>${m.uren}u</td><td>${pct}%</td><td>${muntHtml}</td><td>${eur(m.totaal)}</td>`;
     tbody.appendChild(tr);
   });
 
