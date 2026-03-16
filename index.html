@@ -93,6 +93,12 @@
 </div>
 
 <script>
+const BILJETTEN=[
+  {label:'€50',w:5000},
+  {label:'€20',w:2000},
+  {label:'€10',w:1000},
+  {label:'€5',w:500},
+];
 const MUNTEN=[
   {label:'€2',w:200},
   {label:'€1',w:100},
@@ -108,6 +114,20 @@ function eur(ct){return'€'+(ct/100).toFixed(2).replace('.',',');}
 function renderCoins(){
   const g=document.getElementById('coinGrid');
   g.innerHTML='';
+  const sectB=document.createElement('div');
+  sectB.style.cssText='grid-column:1/-1;font-size:12px;color:#666;margin-bottom:2px;margin-top:4px';
+  sectB.textContent='Biljetten';
+  g.appendChild(sectB);
+  BILJETTEN.forEach(m=>{
+    const d=document.createElement('div');
+    d.className='coin-row';
+    d.innerHTML=`<span class="coin-label">${m.label}</span><input type="number" min="0" value="0" id="coin_${m.w}" oninput="updateTotals()" style="width:70px">`;
+    g.appendChild(d);
+  });
+  const sectM=document.createElement('div');
+  sectM.style.cssText='grid-column:1/-1;font-size:12px;color:#666;margin-bottom:2px;margin-top:8px';
+  sectM.textContent='Muntjes';
+  g.appendChild(sectM);
   MUNTEN.forEach(m=>{
     const d=document.createElement('div');
     d.className='coin-row';
@@ -118,7 +138,7 @@ function renderCoins(){
 
 function updateTotals(){
   let t=0;
-  MUNTEN.forEach(m=>{const v=parseInt(document.getElementById('coin_'+m.w).value)||0;t+=v*m.w;});
+  [...BILJETTEN,...MUNTEN].forEach(m=>{const v=parseInt(document.getElementById('coin_'+m.w).value)||0;t+=v*m.w;});
   document.getElementById('totaalPot').textContent=eur(t);
   document.getElementById('totaalVerdubbeld').textContent=eur(t*2);
 }
@@ -169,32 +189,62 @@ function bereken(){
   const mws=getMWData().filter(m=>m.uren>0);
   if(!mws.length){alert('Voeg minstens één medewerker met uren toe.');return;}
   const totU=mws.reduce((s,m)=>s+m.uren,0);
-  const coins={};
-  MUNTEN.forEach(m=>{coins[m.w]=parseInt(document.getElementById('coin_'+m.w).value)||0;});
-  const verdeling=mws.map(m=>({naam:m.naam,uren:m.uren,munten:{},totaal:0}));
+  const allItems=[...BILJETTEN,...MUNTEN];
+  const verdeling=mws.map(m=>({naam:m.naam,uren:m.uren,items:{},totaal:0}));
   const rest={};
+
+  // Muntjes: deel naar rato, rest blijft in pot
   MUNTEN.forEach(c=>{
-    const totM=coins[c.w]*2;
+    const totM=(parseInt(document.getElementById('coin_'+c.w).value)||0)*2;
     let uitgedeeld=0;
     mws.forEach((m,i)=>{
       const krijgt=Math.floor(totM*(m.uren/totU));
-      verdeling[i].munten[c.w]=(verdeling[i].munten[c.w]||0)+krijgt;
+      verdeling[i].items[c.w]=(verdeling[i].items[c.w]||0)+krijgt;
       verdeling[i].totaal+=krijgt*c.w;
       uitgedeeld+=krijgt;
     });
     const r=totM-uitgedeeld;
     if(r>0)rest[c.w]=(rest[c.w]||0)+r;
   });
+
+  // Biljetten: elk biljet gaat naar wie het grootste openstaande recht heeft
+  BILJETTEN.forEach(c=>{
+    const totB=(parseInt(document.getElementById('coin_'+c.w).value)||0)*2;
+    // Bereken ideaal aandeel per mw op basis van uren
+    const ideaal=mws.map(m=>(m.uren/totU)*totB*c.w); // in centen
+    let resterend=totB;
+    let uitbetaald=mws.map(()=>0); // centen al uitbetaald via biljetten van dit type
+
+    while(resterend>0){
+      // Wie heeft het grootste tekort tov ideaal?
+      let maxTekort=-Infinity, kandidaat=-1;
+      mws.forEach((_,i)=>{
+        const tekort=ideaal[i]-uitbetaald[i];
+        if(tekort>maxTekort){maxTekort=tekort;kandidaat=i;}
+      });
+      if(kandidaat<0)break;
+      verdeling[kandidaat].items[c.w]=(verdeling[kandidaat].items[c.w]||0)+1;
+      verdeling[kandidaat].totaal+=c.w;
+      uitbetaald[kandidaat]+=c.w;
+      resterend--;
+    }
+    // Resterende biljetten die niemand meer recht op heeft
+    if(resterend>0)rest[c.w]=(rest[c.w]||0)+resterend;
+  });
+
   const tbody=document.getElementById('resultBody');
   tbody.innerHTML='';
   verdeling.forEach(m=>{
-    const muntStr=MUNTEN.filter(c=>m.munten[c.w]>0).map(c=>`${m.munten[c.w]}× ${c.label}`).join(', ')||'—';
+    const bilStr=BILJETTEN.filter(c=>m.items[c.w]>0).map(c=>`${m.items[c.w]}× ${c.label}`).join(', ');
+    const muntStr=MUNTEN.filter(c=>m.items[c.w]>0).map(c=>`${m.items[c.w]}× ${c.label}`).join(', ');
+    const alles=[bilStr,muntStr].filter(Boolean).join(' + ')||'—';
     const pct=((m.uren/totU)*100).toFixed(1);
     const tr=document.createElement('tr');
-    tr.innerHTML=`<td>${m.naam}</td><td>${m.uren}u</td><td>${pct}%</td><td>${muntStr}</td><td>${eur(m.totaal)}</td>`;
+    tr.innerHTML=`<td>${m.naam}</td><td>${m.uren}u</td><td>${pct}%</td><td>${alles}</td><td>${eur(m.totaal)}</td>`;
     tbody.appendChild(tr);
   });
-  const restEntries=MUNTEN.filter(c=>rest[c.w]>0);
+
+  const restEntries=allItems.filter(c=>rest[c.w]>0);
   const restBox=document.getElementById('restBox');
   if(restEntries.length){
     const restStr=restEntries.map(c=>`${rest[c.w]}× ${c.label}`).join(', ');
