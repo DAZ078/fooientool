@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fooien Rekentool – De Ambassade</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:system-ui,sans-serif;background:#f4f4f2;color:#111;padding:1.5rem;max-width:860px;margin:0 auto}
+  h1{font-size:20px;font-weight:500;margin-bottom:1.5rem;color:#111}
+  .section{background:#fff;border:0.5px solid #ddd;border-radius:12px;padding:1rem 1.25rem;margin-bottom:1rem}
+  h2{font-size:15px;font-weight:500;margin-bottom:12px;color:#111}
+  input[type=number],input[type=text]{padding:6px 8px;font-size:14px;border:0.5px solid #ccc;border-radius:8px;background:#f5f5f5;color:#111}
+  .coin-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+  .coin-row{display:flex;align-items:center;gap:8px;font-size:13px}
+  .coin-label{width:56px}
+  .totals{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+  .metric{background:#f5f5f5;border-radius:8px;padding:10px 12px}
+  .metric-label{font-size:12px;color:#666;margin-bottom:4px}
+  .metric-value{font-size:20px;font-weight:500}
+  .mw-row{display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap}
+  .mw-row input[type=text]{width:140px}
+  .mw-row input[type=number]{width:74px}
+  button{padding:7px 14px;font-size:13px;border:0.5px solid #ccc;border-radius:8px;background:transparent;color:#111;cursor:pointer}
+  button:hover{background:#f0f0f0}
+  .btn-add{color:#185fa5;border-color:#185fa5}
+  .btn-save{color:#3b6d11;border-color:#3b6d11}
+  .btn-calc{background:#e6f1fb;color:#185fa5;border-color:#185fa5;font-weight:500;width:100%;padding:10px;font-size:14px;margin-top:4px}
+  .btn-remove{padding:4px 8px;font-size:12px;color:#a32d2d;border-color:#a32d2d}
+  .btn-print{background:#eaf3de;color:#3b6d11;border-color:#3b6d11;font-size:13px}
+  .btn-reset{font-size:13px;color:#666}
+  .save-badge{font-size:11px;color:#3b6d11;margin-left:8px;opacity:0;transition:opacity 0.4s}
+  .result-table{width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed}
+  .result-table th{text-align:left;color:#666;font-weight:400;padding:6px 8px;border-bottom:0.5px solid #ddd}
+  .result-table td{padding:6px 8px;border-bottom:0.5px solid #ddd;vertical-align:top;word-break:break-word}
+  .rest-box{background:#faeeda;border:0.5px solid #ba7517;border-radius:8px;padding:10px 12px;font-size:13px;color:#854f0b;margin-top:8px}
+  .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+  @media print{
+    body{background:#fff;padding:0}
+    .no-print{display:none!important}
+    .section{border:none;padding:0}
+    h1{margin-bottom:0.5rem}
+  }
+</style>
+</head>
+<body>
+
+<h1>Fooien Rekentool – De Ambassade</h1>
+
+<div class="section no-print">
+  <h2>Muntjes in de pot</h2>
+  <div class="coin-grid" id="coinGrid"></div>
+  <div class="totals">
+    <div class="metric"><div class="metric-label">Totaal in pot</div><div class="metric-value" id="totaalPot">€0,00</div></div>
+    <div class="metric"><div class="metric-label">Na verdubbelaar (×2)</div><div class="metric-value" id="totaalVerdubbeld">€0,00</div></div>
+  </div>
+</div>
+
+<div class="section no-print">
+  <h2>Medewerkers <span class="save-badge" id="saveBadge">✓ opgeslagen</span></h2>
+  <div id="mwList"></div>
+  <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+    <button class="btn-add" onclick="addMW()">+ Medewerker toevoegen</button>
+    <button class="btn-save" onclick="saveMW()">Opslaan</button>
+  </div>
+</div>
+
+<div class="no-print">
+  <button class="btn-calc" onclick="bereken()">Verdeel de pot</button>
+</div>
+
+<div id="resultSection" style="display:none;margin-top:1rem">
+  <div class="section">
+    <h2>Verdeling</h2>
+    <table class="result-table">
+      <thead>
+        <tr>
+          <th style="width:22%">Medewerker</th>
+          <th style="width:10%">Uren</th>
+          <th style="width:10%">Aandeel</th>
+          <th style="width:42%">Munten</th>
+          <th style="width:16%">Totaal</th>
+        </tr>
+      </thead>
+      <tbody id="resultBody"></tbody>
+    </table>
+    <div id="restBox" style="display:none"></div>
+    <div class="actions no-print">
+      <button class="btn-print" onclick="window.print()">Afdrukken</button>
+      <button class="btn-reset" onclick="resetPot()">Nieuwe verdeling</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const MUNTEN=[
+  {label:'€2',w:200},
+  {label:'€1',w:100},
+  {label:'50ct',w:50},
+  {label:'20ct',w:20},
+  {label:'10ct',w:10},
+  {label:'5ct',w:5},
+];
+const STORAGE_KEY='ambassade_fooien_mw';
+
+function eur(ct){return'€'+(ct/100).toFixed(2).replace('.',',');}
+
+function renderCoins(){
+  const g=document.getElementById('coinGrid');
+  g.innerHTML='';
+  MUNTEN.forEach(m=>{
+    const d=document.createElement('div');
+    d.className='coin-row';
+    d.innerHTML=`<span class="coin-label">${m.label}</span><input type="number" min="0" value="0" id="coin_${m.w}" oninput="updateTotals()" style="width:70px">`;
+    g.appendChild(d);
+  });
+}
+
+function updateTotals(){
+  let t=0;
+  MUNTEN.forEach(m=>{const v=parseInt(document.getElementById('coin_'+m.w).value)||0;t+=v*m.w;});
+  document.getElementById('totaalPot').textContent=eur(t);
+  document.getElementById('totaalVerdubbeld').textContent=eur(t*2);
+}
+
+let mwId=0;
+function addMW(naam='',uren=''){
+  mwId++;
+  const id='mw_'+mwId;
+  const div=document.createElement('div');
+  div.className='mw-row';
+  div.id=id;
+  div.innerHTML=`<input type="text" placeholder="Naam" id="${id}_naam" value="${naam}">
+    <input type="number" min="0" step="0.5" placeholder="Uren" id="${id}_uren" value="${uren}" style="width:74px">
+    <button class="btn-remove" onclick="document.getElementById('${id}').remove()">verwijder</button>`;
+  document.getElementById('mwList').appendChild(div);
+}
+
+function getMWData(){
+  return Array.from(document.querySelectorAll('#mwList .mw-row')).map(r=>{
+    const id=r.id;
+    return{
+      naam:document.getElementById(id+'_naam').value.trim(),
+      uren:parseFloat(document.getElementById(id+'_uren').value)||0
+    };
+  });
+}
+
+function saveMW(){
+  const data=getMWData();
+  localStorage.setItem(STORAGE_KEY,JSON.stringify(data));
+  const badge=document.getElementById('saveBadge');
+  badge.style.opacity='1';
+  setTimeout(()=>{badge.style.opacity='0';},2000);
+}
+
+function loadMW(){
+  try{
+    const raw=localStorage.getItem(STORAGE_KEY);
+    if(raw){
+      const data=JSON.parse(raw);
+      if(data.length){data.forEach(m=>addMW(m.naam,m.uren));return;}
+    }
+  }catch(e){}
+  addMW();addMW();
+}
+
+function bereken(){
+  const mws=getMWData().filter(m=>m.uren>0);
+  if(!mws.length){alert('Voeg minstens één medewerker met uren toe.');return;}
+  const totU=mws.reduce((s,m)=>s+m.uren,0);
+  const coins={};
+  MUNTEN.forEach(m=>{coins[m.w]=parseInt(document.getElementById('coin_'+m.w).value)||0;});
+  const verdeling=mws.map(m=>({naam:m.naam,uren:m.uren,munten:{},totaal:0}));
+  const rest={};
+  MUNTEN.forEach(c=>{
+    const totM=coins[c.w]*2;
+    let uitgedeeld=0;
+    mws.forEach((m,i)=>{
+      const krijgt=Math.floor(totM*(m.uren/totU));
+      verdeling[i].munten[c.w]=(verdeling[i].munten[c.w]||0)+krijgt;
+      verdeling[i].totaal+=krijgt*c.w;
+      uitgedeeld+=krijgt;
+    });
+    const r=totM-uitgedeeld;
+    if(r>0)rest[c.w]=(rest[c.w]||0)+r;
+  });
+  const tbody=document.getElementById('resultBody');
+  tbody.innerHTML='';
+  verdeling.forEach(m=>{
+    const muntStr=MUNTEN.filter(c=>m.munten[c.w]>0).map(c=>`${m.munten[c.w]}× ${c.label}`).join(', ')||'—';
+    const pct=((m.uren/totU)*100).toFixed(1);
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${m.naam}</td><td>${m.uren}u</td><td>${pct}%</td><td>${muntStr}</td><td>${eur(m.totaal)}</td>`;
+    tbody.appendChild(tr);
+  });
+  const restEntries=MUNTEN.filter(c=>rest[c.w]>0);
+  const restBox=document.getElementById('restBox');
+  if(restEntries.length){
+    const restStr=restEntries.map(c=>`${rest[c.w]}× ${c.label}`).join(', ');
+    const restCt=restEntries.reduce((s,c)=>s+rest[c.w]*c.w,0);
+    restBox.style.display='block';
+    restBox.innerHTML=`Restant blijft in de pot: ${restStr} (${eur(restCt)})`;
+  }else{restBox.style.display='none';}
+  document.getElementById('resultSection').style.display='block';
+  document.getElementById('resultSection').scrollIntoView({behavior:'smooth'});
+}
+
+function resetPot(){
+  MUNTEN.forEach(m=>{document.getElementById('coin_'+m.w).value=0;});
+  updateTotals();
+  document.getElementById('resultSection').style.display='none';
+}
+
+renderCoins();
+loadMW();
+</script>
+</body>
+</html>
